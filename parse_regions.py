@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-INPUT_FILE = "regions.txt"
+INPUT_FILE = "descr_regions.txt"
 
 groups = defaultdict(list)
 missing_local = []

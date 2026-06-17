@@ -53,11 +53,11 @@ def convert_regions_to_settlements():
         f.write("\n".join(output_lines) + "\n")
     print(f"Conversion complete. Output written to {output_path}")
     if missing_regions:
-        print("\n[WARNING] The following regions were not found in descr_regions.txt:")
+        print("[WARNING] The following regions were not found in descr_regions.txt:")
         for area, reg in missing_regions:
             print(f"  - In area '{area}': '{reg}'")
     else:
-        print("\nAll regions successfully matched to their respective settlements.")
+        print("All regions successfully matched to their respective settlements.")
 
 if __name__ == "__main__":
     convert_regions_to_settlements()
