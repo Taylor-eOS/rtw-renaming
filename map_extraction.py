@@ -1,5 +1,6 @@
 import os
 from PIL import Image
+from areas import AREAS
 
 input_filename = "map_regions.tga"
 txt_filename = "settlement_coordinates.txt"
@@ -93,10 +94,31 @@ def load_regions_dictionary(descr_regions_path):
                 rgb_to_settlement[rgb] = settlement_name
     return rgb_to_settlement
 
+def calculate_convex_hull(points):
+    if len(points) <= 1:
+        return points
+    points = sorted(set(points))
+    lower = []
+    for p in points:
+        while len(lower) >= 2 and (lower[-1][0] - lower[-2][0]) * (p[1] - lower[-2][1]) - (lower[-1][1] - lower[-2][1]) * (p[0] - lower[-2][0]) <= 0:
+            lower.pop()
+        lower.append(p)
+    upper = []
+    for p in reversed(points):
+        while len(upper) >= 2 and (upper[-1][0] - upper[-2][0]) * (p[1] - upper[-2][1]) - (upper[-1][1] - upper[-2][1]) * (p[0] - upper[-2][0]) <= 0:
+            upper.pop()
+        upper.append(p)
+    return lower[:-1] + upper[:-1]
+
 def generate_html_map(html_filename, bg_image_filename, valid_settlements, width, height, rgb_to_settlement):
     scale = 4
     disp_width = width * scale
     disp_height = height * scale
+    settlement_to_area = {}
+    for area_name, settlements_list in AREAS.items():
+        for s_name in settlements_list:
+            settlement_to_area[s_name] = area_name
+    area_points = {}
     html_lines = [
         "<!DOCTYPE html>",
         "<html>",
@@ -124,9 +146,29 @@ def generate_html_map(html_filename, bg_image_filename, valid_settlements, width
             settlement_name = f"Unknown (RGB {region_color[0]} {region_color[1]} {region_color[2]})"
         left_pos = x * scale
         bottom_pos = y * scale
+        svg_y = disp_height - bottom_pos
+        if settlement_name in settlement_to_area:
+            area_name = settlement_to_area[settlement_name]
+            if area_name not in area_points:
+                area_points[area_name] = []
+            area_points[area_name].append((left_pos, svg_y))
         html_lines.append(f'        <div class="settlement" style="left: {left_pos}px; bottom: {bottom_pos}px;">')
         html_lines.append(f'            <span class="tooltip">{settlement_name}<br>X: {x}, Y: {y}</span>')
         html_lines.append('        </div>')
+    html_lines.append(f'        <svg style="position: absolute; top: 0; left: 0; width: {disp_width}px; height: {disp_height}px; pointer-events: none;">')
+    for area_name, points in area_points.items():
+        hull = calculate_convex_hull(points)
+        if not hull:
+            continue
+        hue = abs(hash(area_name)) % 360
+        stroke_color = f"hsla({hue}, 80%, 50%, 0.8)"
+        fill_color = f"hsla({hue}, 80%, 50%, 0.2)"
+        if len(hull) > 2:
+            points_str = " ".join(f"{px},{py}" for px, py in hull)
+            html_lines.append(f'            <polygon points="{points_str}" style="fill:{fill_color};stroke:{stroke_color};stroke-width:2" />')
+        elif len(hull) == 2:
+            html_lines.append(f'            <line x1="{hull[0][0]}" y1="{hull[0][1]}" x2="{hull[1][0]}" y2="{hull[1][1]}" style="stroke:{stroke_color};stroke-width:2" />')
+    html_lines.append('        </svg>')
     html_lines.extend([
         "    </div>",
         "</div>",
@@ -156,4 +198,3 @@ def generate_settlement_map():
 
 if __name__ == "__main__":
     generate_settlement_map()
-
