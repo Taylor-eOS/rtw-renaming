@@ -1,7 +1,6 @@
 import os
 from PIL import Image
 from areas import AREAS
-
 input_filename = "map_regions.tga"
 txt_filename = "settlement_coordinates.txt"
 html_filename = "settlement_map.html"
@@ -110,16 +109,8 @@ def calculate_convex_hull(points):
         upper.append(p)
     return lower[:-1] + upper[:-1]
 
-def generate_html_map(html_filename, bg_image_filename, valid_settlements, width, height, rgb_to_settlement):
-    scale = 4
-    disp_width = width * scale
-    disp_height = height * scale
-    settlement_to_area = {}
-    for area_name, settlements_list in AREAS.items():
-        for s_name in settlements_list:
-            settlement_to_area[s_name] = area_name
-    area_points = {}
-    html_lines = [
+def get_html_boilerplate(disp_width, disp_height, bg_image_filename):
+    return [
         "<!DOCTYPE html>",
         "<html>",
         "<head>",
@@ -139,6 +130,10 @@ def generate_html_map(html_filename, bg_image_filename, valid_settlements, width
         '<div class="container">',
         '<div class="map-canvas">'
     ]
+
+def build_settlement_elements(valid_settlements, rgb_to_settlement, settlement_to_area, scale, disp_height):
+    html_lines = []
+    area_points = {}
     for idx, (x, y, region_color, _, _) in enumerate(valid_settlements):
         settlement_name = rgb_to_settlement.get(region_color)
         if not settlement_name:
@@ -155,7 +150,10 @@ def generate_html_map(html_filename, bg_image_filename, valid_settlements, width
         html_lines.append(f'        <div class="settlement" style="left: {left_pos}px; bottom: {bottom_pos}px;">')
         html_lines.append(f'            <span class="tooltip">{settlement_name}<br>X: {x}, Y: {y}</span>')
         html_lines.append('        </div>')
-    html_lines.append(f'        <svg style="position: absolute; top: 0; left: 0; width: {disp_width}px; height: {disp_height}px; pointer-events: none;">')
+    return html_lines, area_points
+
+def build_svg_elements(area_points, disp_width, disp_height):
+    html_lines = [f'        <svg style="position: absolute; top: 0; left: 0; width: {disp_width}px; height: {disp_height}px; pointer-events: none;">']
     for area_name, points in area_points.items():
         hull = calculate_convex_hull(points)
         if not hull:
@@ -168,7 +166,25 @@ def generate_html_map(html_filename, bg_image_filename, valid_settlements, width
             html_lines.append(f'            <polygon points="{points_str}" style="fill:{fill_color};stroke:{stroke_color};stroke-width:2" />')
         elif len(hull) == 2:
             html_lines.append(f'            <line x1="{hull[0][0]}" y1="{hull[0][1]}" x2="{hull[1][0]}" y2="{hull[1][1]}" style="stroke:{stroke_color};stroke-width:2" />')
+        cx = sum(p[0] for p in hull) / len(hull)
+        cy = sum(p[1] for p in hull) / len(hull)
+        display_name = area_name.removeprefix("local_")
+        html_lines.append(f'            <text x="{cx}" y="{cy}" fill="{stroke_color}" font-size="12px" font-weight="bold" text-anchor="middle" dominant-baseline="central">{display_name}</text>')
     html_lines.append('        </svg>')
+    return html_lines
+
+def generate_html_map(html_filename, bg_image_filename, valid_settlements, width, height, rgb_to_settlement):
+    scale = 4
+    disp_width = width * scale
+    disp_height = height * scale
+    settlement_to_area = {}
+    for area_name, settlements_list in AREAS.items():
+        for s_name in settlements_list:
+            settlement_to_area[s_name] = area_name
+    html_lines = get_html_boilerplate(disp_width, disp_height, bg_image_filename)
+    settlement_html, area_points = build_settlement_elements(valid_settlements, rgb_to_settlement, settlement_to_area, scale, disp_height)
+    html_lines.extend(settlement_html)
+    html_lines.extend(build_svg_elements(area_points, disp_width, disp_height))
     html_lines.extend([
         "    </div>",
         "</div>",
@@ -195,6 +211,5 @@ def generate_settlement_map():
     generate_background_map(img_object, valid_settlements, bg_image_filename)
     generate_html_map(html_filename, bg_image_filename, valid_settlements, width, height, rgb_to_settlement)
     print("Files successfully generated.")
-
 if __name__ == "__main__":
     generate_settlement_map()
