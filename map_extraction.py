@@ -1,6 +1,8 @@
 import os
+import math
 from PIL import Image
 from areas import AREAS
+
 input_filename = "map_regions.tga"
 txt_filename = "settlement_coordinates.txt"
 html_filename = "settlement_map.html"
@@ -109,6 +111,38 @@ def calculate_convex_hull(points):
         upper.append(p)
     return lower[:-1] + upper[:-1]
 
+def expand_polygon(hull, padding=15):
+    if len(hull) < 3:
+        return hull
+    cx = sum(p[0] for p in hull) / len(hull)
+    cy = sum(p[1] for p in hull) / len(hull)
+    expanded = []
+    for x, y in hull:
+        dx = x - cx
+        dy = y - cy
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist > 0:
+            expanded.append((x + (dx / dist) * padding, y + (dy / dist) * padding))
+        else:
+            expanded.append((x, y))
+    return expanded
+
+def is_point_in_polygon(x, y, poly):
+    n = len(poly)
+    inside = False
+    p1x, p1y = poly[0]
+    for i in range(n + 1):
+        p2x, p2y = poly[i % n]
+        if y > min(p1y, p2y):
+            if y <= max(p1y, p2y):
+                if x <= max(p1x, p2x):
+                    if p1y != p2y:
+                        xints = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                    if p1x == p2x or x <= xints:
+                        inside = not inside
+        p1x, p1y = p2x, p2y
+    return inside
+
 def get_html_boilerplate(disp_width, disp_height, bg_image_filename):
     return [
         "<!DOCTYPE html>",
@@ -154,6 +188,9 @@ def build_settlement_elements(valid_settlements, rgb_to_settlement, settlement_t
 
 def build_svg_elements(area_points, disp_width, disp_height):
     html_lines = [f'        <svg style="position: absolute; top: 0; left: 0; width: {disp_width}px; height: {disp_height}px; pointer-events: none;">']
+    all_foreign_points = {}
+    for name, pts in area_points.items():
+        all_foreign_points[name] = [p for o_name, o_pts in area_points.items() if o_name != name for p in o_pts]
     for area_name, points in area_points.items():
         hull = calculate_convex_hull(points)
         if not hull:
@@ -161,13 +198,65 @@ def build_svg_elements(area_points, disp_width, disp_height):
         hue = abs(hash(area_name)) % 360
         stroke_color = f"hsla({hue}, 80%, 50%, 0.8)"
         fill_color = f"hsla({hue}, 80%, 50%, 0.2)"
-        if len(hull) > 2:
-            points_str = " ".join(f"{px},{py}" for px, py in hull)
-            html_lines.append(f'            <polygon points="{points_str}" style="fill:{fill_color};stroke:{stroke_color};stroke-width:2" />')
-        elif len(hull) == 2:
-            html_lines.append(f'            <line x1="{hull[0][0]}" y1="{hull[0][1]}" x2="{hull[1][0]}" y2="{hull[1][1]}" style="stroke:{stroke_color};stroke-width:2" />')
         cx = sum(p[0] for p in hull) / len(hull)
         cy = sum(p[1] for p in hull) / len(hull)
+        if len(hull) > 2:
+            hull = expand_polygon(hull, padding=15)
+            foreign_pts = all_foreign_points.get(area_name, [])
+            for fx, fy in foreign_pts:
+                if is_point_in_polygon(fx, fy, hull):
+                    min_dist = float('inf')
+                    insert_idx = 0
+                    for i in range(len(hull)):
+                        p1 = hull[i]
+                        p2 = hull[(i + 1) % len(hull)]
+                        dx = p2[0] - p1[0]
+                        dy = p2[1] - p1[1]
+                        if dx == 0 and dy == 0:
+                            dist = math.sqrt((fx - p1[0])**2 + (fy - p1[1])**2)
+                        else:
+                            t = ((fx - p1[0]) * dx + (fy - p1[1]) * dy) / (dx * dx + dy * dy)
+                            t = max(0, min(1, t))
+                            closest_x = p1[0] + t * dx
+                            closest_y = p1[1] + t * dy
+                            dist = math.sqrt((fx - closest_x)**2 + (fy - closest_y)**2)
+                        if dist < min_dist:
+                            min_dist = dist
+                            insert_idx = i + 1
+                    dcx = cx - fx
+                    dcy = cy - fy
+                    dc_dist = math.sqrt(dcx * dcx + dcy * dcy)
+                    if dc_dist > 0:
+                        ix = fx + (dcx / dc_dist) * 15
+                        iy = fy + (dcy / dc_dist) * 15
+                    else:
+                        ix, iy = fx, fy
+                    hull.insert(insert_idx, (ix, iy))
+            path_segments = []
+            for i in range(len(hull)):
+                p0 = hull[i - 1]
+                p1 = hull[i]
+                p2 = hull[(i + 1) % len(hull)]
+                v1x, v1y = p1[0] - p0[0], p1[1] - p0[1]
+                v2x, v2y = p2[0] - p1[0], p2[1] - p1[1]
+                d1 = math.sqrt(v1x * v1x + v1y * v1y)
+                d2 = math.sqrt(v2x * v2x + v2y * v2y)
+                r = 12
+                r1 = min(r, d1 / 2) if d1 > 0 else 0
+                r2 = min(r, d2 / 2) if d2 > 0 else 0
+                start_x = p1[0] - (v1x / d1) * r1 if d1 > 0 else p1[0]
+                start_y = p1[1] - (v1y / d1) * r1 if d1 > 0 else p1[1]
+                end_x = p1[0] + (v2x / d2) * r2 if d2 > 0 else p1[0]
+                end_y = p1[1] + (v2y / d2) * r2 if d2 > 0 else p1[1]
+                if i == 0:
+                    path_segments.append(f"M {start_x} {start_y}")
+                else:
+                    path_segments.append(f"L {start_x} {start_y}")
+                path_segments.append(f"Q {p1[0]} {p1[1]}, {end_x} {end_y}")
+            path_data = " ".join(path_segments) + " Z"
+            html_lines.append(f'            <path d="{path_data}" style="fill:{fill_color};stroke:{stroke_color};stroke-width:2" />')
+        elif len(hull) == 2:
+            html_lines.append(f'            <line x1="{hull[0][0]}" y1="{hull[0][1]}" x2="{hull[1][0]}" y2="{hull[1][1]}" style="stroke:{stroke_color};stroke-width:2" />')
         display_name = area_name.removeprefix("local_")
         html_lines.append(f'            <text x="{cx}" y="{cy}" fill="{stroke_color}" font-size="12px" font-weight="bold" text-anchor="middle" dominant-baseline="central">{display_name}</text>')
     html_lines.append('        </svg>')
@@ -211,5 +300,6 @@ def generate_settlement_map():
     generate_background_map(img_object, valid_settlements, bg_image_filename)
     generate_html_map(html_filename, bg_image_filename, valid_settlements, width, height, rgb_to_settlement)
     print("Files successfully generated.")
+
 if __name__ == "__main__":
     generate_settlement_map()
