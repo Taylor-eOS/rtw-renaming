@@ -1,5 +1,7 @@
 from collections import defaultdict
 
+"""Extracts the "local_*" identifier from each block in descr_regions, and groups the blocks by that identifier."""
+
 INPUT_FILE = "descr_regions.txt"
 
 groups = defaultdict(list)

@@ -5,8 +5,10 @@ import tty
 import termios
 from pathlib import Path
 
-INPUT_FILE = Path("input.txt")
-OUTPUT_FILE = Path("output.txt")
+"""Renames the units in export_units to what's in the parenthesis."""
+
+INPUT_FILE = Path("export_units.txt")
+OUTPUT_FILE = Path("export_units_ed.txt")
 unit_re = re.compile(r"^(\s*)(\{[^}]+\})\s*(.+?)\s*$")
 
 def get_key():

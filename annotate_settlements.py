@@ -1,5 +1,10 @@
 import os
 
+"""Updates the regions list with coordinates."""
+
+descr_regions_path = "descr_regions.txt"
+txt_filename = "settlement_coordinates.txt"
+
 def load_regions_dictionary(descr_regions_path):
     rgb_to_names = {}
     if not os.path.exists(descr_regions_path):
@@ -50,8 +55,6 @@ def update_coordinates_file(txt_filename, rgb_to_names):
         f.writelines(updated_lines)
 
 def main():
-    descr_regions_path = "descr_regions.txt"
-    txt_filename = "settlement_coordinates.txt"
     rgb_to_names = load_regions_dictionary(descr_regions_path)
     if not rgb_to_names:
         print("Regions dictionary data is unavailable. Aborting update.")

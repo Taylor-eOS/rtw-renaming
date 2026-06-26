@@ -1,5 +1,8 @@
 import sys
 
+"""Writes the second line from descr_regions (settlement names) into a new file."""
+
+INPUT_FILE = "descr_regions.txt"
 
 def extract_settlements(input_path, output_path):
     try:
@@ -24,4 +27,4 @@ def extract_settlements(input_path, output_path):
     print("Done")
 
 if __name__ == "__main__":
-    extract_settlements("descr_regions.txt", "settlements.txt")
+    extract_settlements(INPUT_FILE, "settlements.txt")
