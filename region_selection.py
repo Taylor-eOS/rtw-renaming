@@ -1,6 +1,6 @@
 import os
 import tkinter as tk
-from tkinter import messagebox, scrolledtext
+from tkinter import messagebox
 from PIL import Image, ImageTk
 
 settlement_file = "settlement_coordinates.txt"
@@ -13,10 +13,11 @@ HIT_RADIUS = 18
 class SettlementSelector:
     def __init__(self, root):
         self.root = root
-        self.root.title("Settlement Selector")
+        self.root.title("Region Selection")
         self.settlements = []
         self.rgb_to_settlement = {}
         self.selected_settlements = []
+        self.copied_settlements = set()
         self.settlement_regions = []
         self.load_settlement_data()
         self.load_regions_dictionary()
@@ -91,10 +92,7 @@ class SettlementSelector:
         bg_width, bg_height = self.bg_image.size
         self.display_width = bg_width * SCALE
         self.display_height = bg_height * SCALE
-        display_image = self.bg_image.resize(
-            (self.display_width, self.display_height),
-            Image.NEAREST
-        )
+        display_image = self.bg_image.resize((self.display_width, self.display_height),Image.NEAREST)
         self.photo = ImageTk.PhotoImage(display_image)
         self.canvas.config(width=self.display_width, height=self.display_height)
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.photo)
@@ -105,10 +103,14 @@ class SettlementSelector:
         for x, y, rgb in self.settlements:
             canvas_x = x * SCALE
             canvas_y = self.display_height - (y * SCALE)
+            if rgb in self.copied_settlements:
+                fill_color = '#404040'
+            else:
+                fill_color = self._rgb_to_hex(rgb)
             region = self.canvas.create_rectangle(
                 canvas_x - MARKER_RADIUS, canvas_y - MARKER_RADIUS,
                 canvas_x + MARKER_RADIUS, canvas_y + MARKER_RADIUS,
-                fill=self._rgb_to_hex(rgb), outline='white', width=1,
+                fill=fill_color, outline='white', width=1,
                 tags=('settlement',)
             )
             self.settlement_regions.append((region, (x, y, rgb)))
@@ -156,11 +158,21 @@ class SettlementSelector:
             self.status_label.config(text="No settlements selected")
             return
         names = [f'"{self.get_settlement_name(rgb)}"' for rgb in self.selected_settlements]
-        output = '    #"region": [' + ", ".join(names) + '],'
+        output = '    "region": [' + ", ".join(names) + '],'
         self.root.clipboard_clear()
         self.root.clipboard_append(output)
+        for rgb in self.selected_settlements:
+            self.copied_settlements.add(rgb)
         self.status_label.config(text=f"Copied {len(self.selected_settlements)} settlements to clipboard!")
+        self.update_marker_colors()
         self.clear_selection()
+
+    def update_marker_colors(self):
+        for region, (x, y, rgb) in self.settlement_regions:
+            if rgb in self.copied_settlements:
+                self.canvas.itemconfig(region, fill='#404040')
+            else:
+                self.canvas.itemconfig(region, fill=self._rgb_to_hex(rgb))
 
     def clear_selection(self):
         for region, (x, y, rgb) in self.settlement_regions:
